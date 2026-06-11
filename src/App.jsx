@@ -217,6 +217,12 @@ function cleanChatsForStorage(chats) {
   }))
 }
 
+function getMessagePreview(message) {
+  if (!message) return 'No messages yet'
+  if (message.type === 'voice') return 'Voice message'
+  return message.fileName ?? message.text
+}
+
 function App() {
   const savedState = useMemo(() => readSavedState(), [])
   const [theme, setTheme] = useState(savedState?.theme ?? 'light')
@@ -648,17 +654,33 @@ function App() {
     }
     setChats((items) =>
       items.map((chat) =>
-        chat.id === activeChat.id
-          ? {
-              ...chat,
-              attachments: messageToDelete?.fileName
-                ? chat.attachments.filter((file) => file !== messageToDelete.fileName)
-                : chat.attachments,
-              messages: chat.messages.filter((item) => item.id !== messageId),
-            }
-          : chat,
+        {
+          if (chat.id !== activeChat.id) return chat
+
+          const nextMessages = chat.messages.filter((item) => item.id !== messageId)
+          const latestMessage = nextMessages.at(-1)
+          const shouldReduceUnread = messageToDelete?.from === 'them' && chat.unread > 0
+
+          return {
+            ...chat,
+            attachments: messageToDelete?.fileName
+              ? chat.attachments.filter((file) => file !== messageToDelete.fileName)
+              : chat.attachments,
+            preview: getMessagePreview(latestMessage),
+            time: latestMessage?.time ?? '',
+            unread: shouldReduceUnread ? chat.unread - 1 : chat.unread,
+            messages: nextMessages,
+          }
+        },
       ),
     )
+    if (editingMessageId === messageId) {
+      setEditingMessageId(null)
+      setMessage('')
+    }
+    if (replyTo?.id === messageId) {
+      setReplyTo(null)
+    }
     notify('Message deleted')
   }
 
